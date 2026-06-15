@@ -6,6 +6,7 @@
     "dev": "node --watch server.js"
   },
   "dependencies": {
+    "selfsigned": "^5.5.0",
     "ws": "^8.17.0"
   }
 }

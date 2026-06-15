@@ -1,4 +1,4 @@
-const WS_URL = 'ws://localhost:8080';
+const WS_URL = 'wss://192.168.6.154:8080';
 
 let ws = null;
 const queue = [];

@@ -129,7 +129,7 @@ WebXR requires a secure context. For local dev targeting the Quest 3S:
 1. Run Vite with `--https` (uses `@vitejs/plugin-basic-ssl` or a local cert).
 2. Find your dev machine's LAN IP.
 3. Open `https://<LAN-IP>:5173` in the Quest browser and accept the self-signed cert.
-4. The backend WS server can run plain `ws://` on port 8080 (mixed content from Quest browser is allowed for `ws://` to LAN IPs in practice, but prefer `wss://` if cert is available).
+4. The backend WS server runs plain `ws://` on port 8080. **The frontend must connect to `ws://192.168.6.154:8080`** — `ws://localhost:8080` resolves to the headset itself, not the Mac.
 
 ## Key Constraints
 
