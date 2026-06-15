@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Project ASTRA</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body { background: #0d0d1a; overflow: hidden; }
+      #enter-vr {
+        position: fixed;
+        bottom: 32px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 14px 32px;
+        font-size: 18px;
+        font-family: sans-serif;
+        font-weight: 600;
+        color: #fff;
+        background: #1565c0;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        letter-spacing: 0.05em;
+        z-index: 10;
+      }
+      #enter-vr:disabled {
+        background: #444;
+        cursor: default;
+      }
+      #enter-vr:hover:not(:disabled) {
+        background: #1976d2;
+      }
+    </style>
+  </head>
+  <body>
+    <button id="enter-vr">Enter VR</button>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
