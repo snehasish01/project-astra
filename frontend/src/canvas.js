@@ -16,9 +16,9 @@ const BRANCHES = [
     color: '#ffa726',
     x: 0,
     cards: [
-      { title: 'Income Gap',        sub: 'Salary reset on entry' },
-      { title: 'Network Loss',      sub: 'Starting over socially' },
-      { title: 'Transition Time',   sub: 'How long until stable?' },
+      { title: 'Income Gap',       sub: 'Salary reset on entry' },
+      { title: 'Network Loss',     sub: 'Starting over socially' },
+      { title: 'Transition Time',  sub: 'How long until stable?' },
     ],
   },
   {
@@ -33,16 +33,14 @@ const BRANCHES = [
   },
 ];
 
-// World-space layout (metres)
 const Z      = -1.5;
-const HDR_Y  = 1.70;  // header centre
-const CARD_Y = [1.34, 0.97, 0.60];  // card centres
-const CMT_Y  = 0.35;  // commit button centre
+const HDR_Y  = 1.70;
+const CARD_Y = [1.34, 0.97, 0.60];
+const CMT_Y  = 0.35;
 
-// Mesh sizes  (canvas aspect ratios are matched exactly below)
-const HDR_W  = 0.70,  HDR_H  = 0.164;   // 1024 × 240  → 4.267
-const CARD_W = 0.70,  CARD_H = 0.328;   // 1024 × 480  → 2.133
-const CMT_W  = 0.38,  CMT_H  = 0.095;   // 512  × 128  → 4.0
+const HDR_W  = 0.70,  HDR_H  = 0.164;  // 1024 × 240
+const CARD_W = 0.70,  CARD_H = 0.328;  // 1024 × 480
+const CMT_W  = 0.38,  CMT_H  = 0.095;  // 512  × 128
 
 // ─── texture helpers ─────────────────────────────────────────────────────────
 
@@ -102,24 +100,19 @@ function makeCardTex(title, sub, color) {
     roundedRect(ctx, 6, 6, w - 12, h - 12, 20);
     ctx.stroke();
 
-    // accent stripe
     ctx.fillStyle = color;
     ctx.fillRect(6, 6, w - 12, 16);
 
-    // title
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 72px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(title, w / 2, 105);
 
-    // divider
     ctx.strokeStyle = '#1e3a5f'; ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(60, 160); ctx.lineTo(w - 60, 160);
-    ctx.stroke();
+    ctx.moveTo(60, 160); ctx.lineTo(w - 60, 160); ctx.stroke();
 
-    // subtitle (with word-wrap)
     ctx.fillStyle = '#90caf9';
     ctx.font = '54px system-ui, sans-serif';
     ctx.textBaseline = 'top';
@@ -131,8 +124,6 @@ function makeCommitTex() {
   return canvasTex(512, 128, (ctx, w, h) => {
     roundedRect(ctx, 6, 6, w - 12, h - 12, 16);
     ctx.fillStyle = '#b71c1c'; ctx.fill();
-
-    // inner highlight ring
     ctx.strokeStyle = '#ef5350'; ctx.lineWidth = 3;
     roundedRect(ctx, 10, 10, w - 20, h - 20, 12);
     ctx.stroke();
@@ -145,8 +136,6 @@ function makeCommitTex() {
   });
 }
 
-// ─── panel factory ───────────────────────────────────────────────────────────
-
 function makePlane(w, h, texFn) {
   return new THREE.Mesh(
     new THREE.PlaneGeometry(w, h),
@@ -156,30 +145,37 @@ function makePlane(w, h, texFn) {
 
 // ─── public API ──────────────────────────────────────────────────────────────
 
-export function createDecisionCanvas(scene) {
-  const interactables = [];
-  const panels = [];
+export function createDecisionCanvas(scene, { onBranchOpen = () => {}, onCommit = () => {} } = {}) {
+  const interactables   = [];
+  const panels          = [];
+  const allCardMeshes   = [];       // flat list of every card mesh (for gaze tracking)
+  const branchOpenTime  = {};       // branch name → performance.now() when first opened
+  const cardsByBranch   = {};       // branch name → [mesh, mesh, mesh]
 
   for (const b of BRANCHES) {
-    // header — always visible, acts as the expand/collapse toggle
+    // Header — starts hidden (opacity 0, not visible) until fade-in
     const header = makePlane(HDR_W, HDR_H, () => makeHeaderTex(b.name, b.color));
     header.position.set(b.x, HDR_Y, Z);
+    header.material.opacity = 0;
+    header.visible = false;
     header.userData = { type: 'panel_header', branch: b.name };
     scene.add(header);
     interactables.push(header);
 
-    // trade-off cards — visible only when expanded
+    // Cards — hidden until branch is expanded
     const cards = b.cards.map((c, i) => {
       const m = makePlane(CARD_W, CARD_H, () => makeCardTex(c.title, c.sub, b.color));
       m.position.set(b.x, CARD_Y[i], Z);
       m.visible = false;
-      m.userData = { type: 'card', branch: b.name, cardIndex: i };
+      m.userData = { type: 'card', branch: b.name, cardIndex: i, cardTitle: c.title };
       scene.add(m);
       interactables.push(m);
+      allCardMeshes.push(m);
       return m;
     });
+    cardsByBranch[b.name] = cards;
 
-    // commit button — visible only when expanded
+    // Commit button
     const commit = makePlane(CMT_W, CMT_H, makeCommitTex);
     commit.position.set(b.x, CMT_Y, Z);
     commit.visible = false;
@@ -190,27 +186,54 @@ export function createDecisionCanvas(scene) {
     panels.push({ name: b.name, header, cards, commit, expanded: false });
   }
 
+  // ── expand / collapse ───────────────────────────────────────────────────────
+
   function setExpanded(branchName) {
     for (const p of panels) {
-      const open = p.name === branchName ? !p.expanded : false;
-      p.expanded = open;
-      p.cards.forEach(c => { c.visible = open; });
-      p.commit.visible = open;
-      // tint header border slightly when open (multiply color property)
-      p.header.material.color.setHex(open ? 0xccffcc : 0xffffff);
+      const shouldOpen = p.name === branchName ? !p.expanded : false;
+      const wasExpanded = p.expanded;
+      p.expanded = shouldOpen;
+      p.cards.forEach(c => { c.visible = shouldOpen; });
+      p.commit.visible = shouldOpen;
+      p.header.material.color.setHex(shouldOpen ? 0xccffcc : 0xffffff);
+
+      if (shouldOpen && !wasExpanded) {
+        branchOpenTime[branchName] = performance.now();
+        onBranchOpen(branchName);
+      }
     }
   }
+
+  // ── select handler (called by controller) ───────────────────────────────────
 
   function onSelect(object) {
     const { type, branch } = object.userData;
     if (type === 'panel_header') {
       setExpanded(branch);
     } else if (type === 'commit') {
-      console.log('[astra] commit:', branch);
-      // WebSocket event will go here
+      const openedAt = branchOpenTime[branch] ?? performance.now();
+      onCommit(branch, performance.now() - openedAt);
     }
-    // cards are read-only in the current build
   }
 
-  return { interactables, onSelect };
+  // ── fade-in helpers (called from main.js) ───────────────────────────────────
+
+  function beginFadeIn() {
+    for (const p of panels) {
+      p.header.visible         = true;
+      p.header.material.opacity = 0;
+    }
+  }
+
+  function setHeaderOpacity(v) {
+    for (const p of panels) {
+      p.header.material.opacity = v;
+    }
+  }
+
+  function getCardMeshes(branchName) {
+    return cardsByBranch[branchName] ?? [];
+  }
+
+  return { interactables, onSelect, allCardMeshes, getCardMeshes, beginFadeIn, setHeaderOpacity };
 }

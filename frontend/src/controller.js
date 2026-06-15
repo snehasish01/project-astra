@@ -24,7 +24,7 @@ function makeCursor() {
   return mesh;
 }
 
-export function setupControllers(renderer, scene, interactables, onSelect) {
+export function setupControllers(renderer, scene, interactables, onSelect, onHoverChange = () => {}) {
   const cursor = makeCursor();
   scene.add(cursor);
 
@@ -32,7 +32,6 @@ export function setupControllers(renderer, scene, interactables, onSelect) {
 
   function setHover(mesh, on) {
     if (!mesh) return;
-    // MeshBasicMaterial.color multiplies the texture — white = no tint
     mesh.material.color.setHex(on ? 0xaaddff : 0xffffff);
   }
 
@@ -40,11 +39,7 @@ export function setupControllers(renderer, scene, interactables, onSelect) {
     const c = renderer.xr.getController(i);
     c.add(makeRayLine());
     scene.add(c);
-
-    c.addEventListener('select', () => {
-      if (hovered) onSelect(hovered);
-    });
-
+    c.addEventListener('select', () => { if (hovered) onSelect(hovered); });
     return c;
   });
 
@@ -54,13 +49,11 @@ export function setupControllers(renderer, scene, interactables, onSelect) {
     let hitObject = null;
     let hitPoint  = null;
 
-    // Check both controllers; first hit wins
     for (const c of controllers) {
       _mat4.identity().extractRotation(c.matrixWorld);
       _raycaster.ray.origin.setFromMatrixPosition(c.matrixWorld);
       _raycaster.ray.direction.set(0, 0, -1).applyMatrix4(_mat4);
 
-      // Only test visible objects (Three.js does not filter by .visible automatically)
       const visible = interactables.filter(o => o.visible);
       const hits = _raycaster.intersectObjects(visible, false);
 
@@ -71,7 +64,6 @@ export function setupControllers(renderer, scene, interactables, onSelect) {
       }
     }
 
-    // Update cursor
     if (hitPoint) {
       cursor.position.copy(hitPoint);
       cursor.visible = true;
@@ -79,10 +71,13 @@ export function setupControllers(renderer, scene, interactables, onSelect) {
       cursor.visible = false;
     }
 
-    // Update hover highlight
     if (hitObject !== hovered) {
       setHover(hovered, false);
+      if (hovered) onHoverChange(hovered, false);
+
       setHover(hitObject, true);
+      if (hitObject) onHoverChange(hitObject, true);
+
       hovered = hitObject;
     }
   }
