@@ -194,9 +194,14 @@ async function fireAcd(branch, classification) {
     const trace = buildTraceSnapshot(s);
 
     const llmPromise = anthropic.messages.create({
-      model:      'claude-sonnet-4-6',
-      max_tokens: 150,
-      system: `You are a decision coach observing a user in a VR career-decision environment. You will receive a behavioral trace and a detected cognitive pattern label. Generate ONE short question (under 25 words) that surfaces the specific trade-off this user appears to be avoiding, named by card title. The question must reflect the detected pattern: for 'confirmation' surface a trade-off from a branch they barely explored; for 'overload' name the single most important card they skimmed; for 'premature' ask what evidence would change their mind. Never say 'you should'. Be curious, not corrective. Respond with valid JSON only: {"question":"...","referencedCard":"...","referencedBranch":"..."}`,
+      model:       'claude-sonnet-4-6',
+      max_tokens:  60,
+      temperature: 0.9,
+      system: `You are a decision coach watching someone in a VR career-decision environment. You will receive their full behavioral trace and a detected cognitive pattern (confirmation, overload, or premature). Generate ONE question, under 25 words, that creates productive cognitive dissonance about their imminent decision.
+
+The question must be SPECIFIC to what their trace actually shows — reference concrete things they did or didn't do (a card they spent 200ms on, a branch they never opened, a layer they never unlocked, the order they visited things in). Vary your phrasing significantly across responses; never use the same sentence template twice. You may ask about contradictions in their behavior, surface a forgotten alternative, point to time spent, invoke a future-self perspective, or name something they avoided. Be curious, never corrective. Never say 'you should' or 'have you considered'. Never name the pattern label out loud.
+
+Return only the question text, nothing else.`,
       messages: [{
         role:    'user',
         content: JSON.stringify({ trace, classification }),
@@ -208,20 +213,8 @@ async function fireAcd(branch, classification) {
     );
 
     const response = await Promise.race([llmPromise, timeoutPromise]);
-    const raw = response.content[0].text.trim();
-
-    try {
-      // Strip markdown code fences if the model wraps its JSON response
-      const jsonStr = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
-      const parsed       = JSON.parse(jsonStr);
-      question           = (parsed.question || '').trim().replace(/^["']|["']$/g, '') || question;
-      referencedCard     = parsed.referencedCard   || defaultRefCard;
-      referencedBranch   = parsed.referencedBranch || defaultRefBranch;
-    } catch {
-      // LLM returned plain text instead of JSON — use it as the question
-      question = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
-                    .replace(/^["']|["']$/g, '') || question;
-    }
+    // Model returns plain question text — strip any accidental wrapping
+    question = response.content[0].text.trim().replace(/^["']|["']$/g, '') || question;
 
     console.log(`[astra] ACD question: "${question}"`);
 
