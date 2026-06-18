@@ -1,14 +1,15 @@
 import * as THREE from 'three';
-import { createIntro }           from './intro.js';
-import { createDecisionCanvas, BRANCHES } from './canvas.js';
-import { setupControllers }      from './controller.js';
-import { createGazeTracker }     from './gaze.js';
+import { createIntro }                        from './intro.js';
+import { createDecisionCanvas, BRANCHES }     from './canvas.js';
+import { setupControllers }                   from './controller.js';
+import { createGazeTracker }                  from './gaze.js';
 import { createEnvironment, startAmbientSound } from './environment.js';
-import { createProgressRing }    from './progress.js';
-import { createCompare }         from './compare.js';
-import { createDecisionEcho }    from './echo.js';
-import { createAcdCard }         from './acd_card.js';
-import { sendEvent, onServerMessage } from './socket.js';
+import { createProgressRing }                 from './progress.js';
+import { createCompare }                      from './compare.js';
+import { createDecisionEcho }                 from './echo.js';
+import { createAcdCard }                      from './acd_card.js';
+import { createLockRings }                    from './lock_ring.js';
+import { sendEvent, onServerMessage }         from './socket.js';
 
 // ── Renderer ─────────────────────────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -37,16 +38,21 @@ let   compareOpen  = false;
 let   echoOpen     = false;
 let   acdOpen      = false;
 
-// Pending commit: set when user presses COMMIT, cleared when ACD resolves or echo shows
-let pendingCommitBranch = null;
-let acdFallbackTimer    = null;  // proceeds to echo after 4 s if no ACD trigger arrives
+let pendingCommitBranch  = null;  // set during commit flow
+let acdFallbackTimer     = null;  // 4 s: proceed to echo if no ACD arrives
+let lockedBranch         = null;  // branch whose COMMIT button is locked
+let postAcdActionFired   = false; // guard against duplicate post_acd_action logs
 
+// Tracks which branches already fired commit_intent this session (once per branch)
+const commitIntentFired = new Set();
+
+// Tracks which cards the controller has hovered (for instrumentation)
 const hoveredCards = new Set();
 
 // ── Instrumentation ───────────────────────────────────────────────────────────
 let gazeTracker;
 
-// ── Proceed to Decision Echo (called after ACD resolves or timer fires) ────────
+// ── Proceed to Decision Echo ──────────────────────────────────────────────────
 function proceedWithCommit(branch) {
   clearTimeout(acdFallbackTimer);
   acdFallbackTimer = null;
@@ -63,7 +69,7 @@ const canvas = createDecisionCanvas(scene, {
   },
   onCommit(branch, timeToCommit) {
     sendEvent('commit', { branch, timeToCommit: Math.round(timeToCommit) });
-    // Hold for up to 4 s to allow ACD trigger to arrive from server
+    // Wait up to 4 s for ACD trigger; if none arrives, proceed to echo card
     acdFallbackTimer = setTimeout(() => {
       if (!echoOpen && !acdOpen) proceedWithCommit(branch);
     }, 4000);
@@ -98,32 +104,62 @@ const echo = createDecisionEcho(scene);
 // ── ACD intervention card ─────────────────────────────────────────────────────
 const acd = createAcdCard(scene, camera);
 
+// ── Commit lock rings (one per branch, overlays the COMMIT button) ────────────
+const lockRings = createLockRings(scene);
+
 // ── Server-push: ACD trigger ──────────────────────────────────────────────────
 onServerMessage(msg => {
   if (msg.type !== 'acd_trigger') return;
-  if (echoOpen) return;  // already proceeded past the commit gate
+  if (echoOpen) return;  // already past the commit gate
 
   clearTimeout(acdFallbackTimer);
   acdFallbackTimer = null;
-  acdOpen = true;
 
-  const { question, branch, skippedCard } = msg;
-  console.log(`[astra] ACD trigger: "${question}" (${branch} › ${skippedCard})`);
-  sendEvent('acd_shown', { branch, skippedCard, question });
+  acdOpen            = true;
+  postAcdActionFired = false;
+
+  const { question, pattern, branch, referencedCard, referencedBranch } = msg;
+  console.log(`[astra] ACD (${pattern}): "${question}" [${referencedBranch} › ${referencedCard}]`);
+
+  // Layer 4: lock the Commit button for 4 s while card materialises
+  lockedBranch = branch;
+  sendEvent('acd_lock_started', { branch, pattern });
+
+  lockRings.start(branch, 4000, () => {
+    // Lock expires — release commit button
+    lockedBranch = null;
+    sendEvent('acd_lock_released', { branch });
+
+    // If user hasn't interacted with the ACD card yet, log explored_more
+    if (acdOpen && !postAcdActionFired) {
+      postAcdActionFired = true;
+      sendEvent('post_acd_action', { action: 'explored_more', branch, pattern });
+    }
+  });
+
+  sendEvent('acd_shown', { branch, pattern, referencedCard, referencedBranch, question });
 
   acd.show(
     question,
-    // Reconsider — return to canvas without committing
+    // Reconsider — return to canvas without proceeding
     () => {
       acd.hide();
       acdOpen = false;
-      sendEvent('acd_response', { response: 'reconsider', branch, skippedCard });
+      if (!postAcdActionFired) {
+        postAcdActionFired = true;
+        sendEvent('post_acd_action', { action: 'reconsider', branch, pattern, referencedCard });
+        sendEvent('acd_response',    { response: 'reconsider', branch, pattern, referencedCard });
+      }
     },
     // Commit Anyway — proceed to Decision Echo
     () => {
       acd.hide();
       acdOpen = false;
-      sendEvent('acd_response', { response: 'commit_anyway', branch, skippedCard });
+      if (!postAcdActionFired) {
+        postAcdActionFired = true;
+        sendEvent('post_acd_action', { action: 'commit', branch, pattern, referencedCard });
+        sendEvent('acd_response',    { response: 'commit_anyway', branch, pattern, referencedCard });
+      }
       proceedWithCommit(branch);
     },
   );
@@ -131,9 +167,9 @@ onServerMessage(msg => {
 
 // ── Select handler ────────────────────────────────────────────────────────────
 function handleSelect(object) {
-  const { type } = object.userData;
+  const { type, branch } = object.userData;
 
-  // ACD card takes exclusive focus while visible
+  // ACD card has exclusive focus while visible
   if (acdOpen) {
     acd.onSelect(object);
     return;
@@ -153,8 +189,8 @@ function handleSelect(object) {
   }
 
   if (type === 'echo_confirm') {
-    const branch      = echo.getBranch();
-    const cardStates  = canvas.getCardMeshes(branch).map((m, i) => ({
+    const b = echo.getBranch();
+    const cardStates = canvas.getCardMeshes(b).map((m, i) => ({
       cardIndex:         i,
       title:             m.userData.cardTitle,
       dwellMs:           Math.round(gazeTracker.getTotal(m)),
@@ -162,11 +198,7 @@ function handleSelect(object) {
       maxLayer:          ['surface', 'evidence', 'personal'][m.userData.maxLayer],
       controllerHovered: hoveredCards.has(m),
     }));
-    const skimmedCards = cardStates.filter(s => s.skimmed);
-    skimmedCards.forEach(s =>
-      console.warn(`[astra] SKIMMED: ${branch} › "${s.title}" — ${s.dwellMs}ms, layer: ${s.maxLayer}`),
-    );
-    sendEvent('decision_confirmed', { branch, cardStates });
+    sendEvent('decision_confirmed', { branch: b, cardStates });
     echo.hide(); echoOpen = false; pendingCommitBranch = null;
     return;
   }
@@ -176,11 +208,13 @@ function handleSelect(object) {
   }
 
   if (canvasActive && !echoOpen) {
+    // Block commits while that branch's COMMIT button is locked
+    if (type === 'commit' && lockedBranch === branch) return;
     canvas.onSelect(object);
   }
 }
 
-// ── Controllers ───────────────────────────────────────────────────────────────
+// ── Controllers & hover ───────────────────────────────────────────────────────
 const allInteractables = [
   ...intro.interactables,
   ...canvas.interactables,
@@ -194,9 +228,21 @@ const { update: updateControllers } = setupControllers(
   allInteractables,
   handleSelect,
   (mesh, isHovering) => {
-    if (isHovering && mesh.userData.type === 'card' && !hoveredCards.has(mesh)) {
+    if (!isHovering) return;
+
+    // Card hover instrumentation
+    if (mesh.userData.type === 'card' && !hoveredCards.has(mesh)) {
       hoveredCards.add(mesh);
       sendEvent('card_hover', { branch: mesh.userData.branch, card: mesh.userData.cardIndex });
+    }
+
+    // commit_intent: fires once per branch, the first time the ray touches COMMIT
+    if (mesh.userData.type === 'commit') {
+      const b = mesh.userData.branch;
+      if (!commitIntentFired.has(b)) {
+        commitIntentFired.add(b);
+        sendEvent('commit_intent', { branch: b });
+      }
     }
   },
 );
@@ -248,14 +294,15 @@ renderer.setAnimationLoop((timestamp) => {
     }
   }
 
-  // Head-gaze + progress ring (XR mode only)
+  // Head-gaze + progress ring (XR only)
   if (canvasActive && renderer.xr.isPresenting) {
     gazeTracker.update(timestamp);
     progress.update();
   }
 
-  // ACD card follows camera each frame
+  // ACD card follows camera; lock ring sweeps to completion
   acd.update();
+  lockRings.update();
 
   updateControllers();
   renderer.render(scene, camera);
