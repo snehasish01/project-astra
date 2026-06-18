@@ -7,7 +7,8 @@ import { createEnvironment, startAmbientSound } from './environment.js';
 import { createProgressRing }    from './progress.js';
 import { createCompare }         from './compare.js';
 import { createDecisionEcho }    from './echo.js';
-import { sendEvent }             from './socket.js';
+import { createAcdCard }         from './acd_card.js';
+import { sendEvent, onServerMessage } from './socket.js';
 
 // ── Renderer ─────────────────────────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -34,12 +35,26 @@ let   fadeStart    = null;
 let   canvasActive = false;
 let   compareOpen  = false;
 let   echoOpen     = false;
-let   pendingCommitBranch = null;
+let   acdOpen      = false;
+
+// Pending commit: set when user presses COMMIT, cleared when ACD resolves or echo shows
+let pendingCommitBranch = null;
+let acdFallbackTimer    = null;  // proceeds to echo after 4 s if no ACD trigger arrives
 
 const hoveredCards = new Set();
 
-// ── Instrumentation state ─────────────────────────────────────────────────────
-let gazeTracker;   // assigned after canvas (needs allCardMeshes)
+// ── Instrumentation ───────────────────────────────────────────────────────────
+let gazeTracker;
+
+// ── Proceed to Decision Echo (called after ACD resolves or timer fires) ────────
+function proceedWithCommit(branch) {
+  clearTimeout(acdFallbackTimer);
+  acdFallbackTimer = null;
+  pendingCommitBranch = branch;
+  echo.show(branch);
+  echoOpen = true;
+  sendEvent('decision_echo_shown', { branch });
+}
 
 // ── Decision canvas ───────────────────────────────────────────────────────────
 const canvas = createDecisionCanvas(scene, {
@@ -47,22 +62,16 @@ const canvas = createDecisionCanvas(scene, {
     sendEvent('branch_open', { branch });
   },
   onCommit(branch, timeToCommit) {
-    // Show echo card instead of committing immediately
-    pendingCommitBranch = branch;
-    echo.show(branch);
-    echoOpen = true;
-    sendEvent('decision_echo_shown', {
-      branch,
-      timeToCommit: Math.round(timeToCommit),
-    });
+    sendEvent('commit', { branch, timeToCommit: Math.round(timeToCommit) });
+    // Hold for up to 4 s to allow ACD trigger to arrive from server
+    acdFallbackTimer = setTimeout(() => {
+      if (!echoOpen && !acdOpen) proceedWithCommit(branch);
+    }, 4000);
   },
   onLayerViewed(branch, cardIndex, layer) {
     const layerName = ['surface', 'evidence', 'personal'][layer];
     sendEvent('card_layer_viewed', { branch, card: cardIndex, layer: layerName });
-    // layer >= 1 = genuinely engaged
-    if (layer >= 1) {
-      progress.onEngaged(`${branch}-${cardIndex}`);
-    }
+    if (layer >= 1) progress.onEngaged(`${branch}-${cardIndex}`);
   },
   onCompare() {
     compareOpen = true;
@@ -86,9 +95,49 @@ const compare = createCompare(scene, BRANCHES);
 // ── Decision echo card ────────────────────────────────────────────────────────
 const echo = createDecisionEcho(scene);
 
+// ── ACD intervention card ─────────────────────────────────────────────────────
+const acd = createAcdCard(scene, camera);
+
+// ── Server-push: ACD trigger ──────────────────────────────────────────────────
+onServerMessage(msg => {
+  if (msg.type !== 'acd_trigger') return;
+  if (echoOpen) return;  // already proceeded past the commit gate
+
+  clearTimeout(acdFallbackTimer);
+  acdFallbackTimer = null;
+  acdOpen = true;
+
+  const { question, branch, skippedCard } = msg;
+  console.log(`[astra] ACD trigger: "${question}" (${branch} › ${skippedCard})`);
+  sendEvent('acd_shown', { branch, skippedCard, question });
+
+  acd.show(
+    question,
+    // Reconsider — return to canvas without committing
+    () => {
+      acd.hide();
+      acdOpen = false;
+      sendEvent('acd_response', { response: 'reconsider', branch, skippedCard });
+    },
+    // Commit Anyway — proceed to Decision Echo
+    () => {
+      acd.hide();
+      acdOpen = false;
+      sendEvent('acd_response', { response: 'commit_anyway', branch, skippedCard });
+      proceedWithCommit(branch);
+    },
+  );
+});
+
 // ── Select handler ────────────────────────────────────────────────────────────
 function handleSelect(object) {
   const { type } = object.userData;
+
+  // ACD card takes exclusive focus while visible
+  if (acdOpen) {
+    acd.onSelect(object);
+    return;
+  }
 
   if (type === 'begin_exploration' && !canvasActive && fadeStart === null) {
     object.visible = false;
@@ -104,25 +153,19 @@ function handleSelect(object) {
   }
 
   if (type === 'echo_confirm') {
-    const branch = echo.getBranch();
-    const timeToCommit = pendingCommitBranch
-      ? Math.round(performance.now() - (performance.now()))  // already captured in onCommit
-      : 0;
-    const cardStates = canvas.getCardMeshes(branch).map((m, i) => ({
-      cardIndex: i,
-      title:     m.userData.cardTitle,
-      dwellMs:   Math.round(gazeTracker.getTotal(m)),
-      skimmed:   gazeTracker.isSkimmed(m) && m.userData.maxLayer === 0,
-      maxLayer:  ['surface', 'evidence', 'personal'][m.userData.maxLayer],
+    const branch      = echo.getBranch();
+    const cardStates  = canvas.getCardMeshes(branch).map((m, i) => ({
+      cardIndex:         i,
+      title:             m.userData.cardTitle,
+      dwellMs:           Math.round(gazeTracker.getTotal(m)),
+      skimmed:           gazeTracker.isSkimmed(m) && m.userData.maxLayer === 0,
+      maxLayer:          ['surface', 'evidence', 'personal'][m.userData.maxLayer],
       controllerHovered: hoveredCards.has(m),
     }));
     const skimmedCards = cardStates.filter(s => s.skimmed);
     skimmedCards.forEach(s =>
-      console.warn(`[astra] SKIMMED: ${branch} › "${s.title}" — ${s.dwellMs}ms, layer: ${s.maxLayer}`)
+      console.warn(`[astra] SKIMMED: ${branch} › "${s.title}" — ${s.dwellMs}ms, layer: ${s.maxLayer}`),
     );
-    console.log(`[astra] CONFIRMED → ${branch}\n${cardStates.map(s =>
-      `  [${s.skimmed ? '⚠ SKIMMED' : '✓       '}] "${s.title}" | ${s.dwellMs}ms | layer: ${s.maxLayer}`
-    ).join('\n')}`);
     sendEvent('decision_confirmed', { branch, cardStates });
     echo.hide(); echoOpen = false; pendingCommitBranch = null;
     return;
@@ -143,6 +186,7 @@ const allInteractables = [
   ...canvas.interactables,
   ...compare.interactables,
   ...echo.interactables,
+  ...acd.interactables,
 ];
 
 const { update: updateControllers } = setupControllers(
@@ -204,11 +248,14 @@ renderer.setAnimationLoop((timestamp) => {
     }
   }
 
-  // Head-gaze + progress ring
+  // Head-gaze + progress ring (XR mode only)
   if (canvasActive && renderer.xr.isPresenting) {
     gazeTracker.update(timestamp);
     progress.update();
   }
+
+  // ACD card follows camera each frame
+  acd.update();
 
   updateControllers();
   renderer.render(scene, camera);

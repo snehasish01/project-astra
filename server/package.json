@@ -6,7 +6,11 @@
     "dev": "node --watch server.js"
   },
   "dependencies": {
-    "selfsigned": "^5.5.0",
-    "ws": "^8.17.0"
+    "@anthropic-ai/sdk": "^0.104.2",
+    "dotenv": "^17.4.2",
+    "selfsigned": "^5.5.0"
+  },
+  "devDependencies": {
+    "ws": "^8.21.0"
   }
 }
