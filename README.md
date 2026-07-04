@@ -24,11 +24,11 @@ Detected pattern: **premature** — the user attempted to commit very quickly, w
 
 Detected pattern: **premature** — the user attempted to commit quickly, with very little evidence-layer reading across cards, including the referenced card being left at its surface layer. ACD fired: *"What does the version of you five years from now know about 'Role Ambiguity' that you didn't stay long enough to read today?"*
 
-**Trigger 3 — premature pattern, later in session**
+**Trigger 3 — confirmation pattern, later in session**
 
-![ACD trigger: premature pattern, later trigger](docs/assets/acd-trigger-3.png)
+![ACD trigger: confirmation pattern, later trigger](docs/assets/acd-trigger-3.png)
 
-Detected pattern: **premature** — a second ACD interrupt in the same session, this time citing exact dwell time on the card that was skimmed before committing. ACD fired: *"What does your 3.6 seconds on Pivot's Income Gap card tell you that you didn't stay to ask Upskill's Identity Risk card?"* Note the reference to a precise, session-specific dwell measurement rather than a generic prompt — this is the calibrated LLM layer reasoning over the live behavioral trace, not a canned message.
+Detected pattern: **confirmation** — a second ACD interrupt in the same session: dwell time skewed almost entirely onto Pivot's Income Gap card, with Upskill's Identity Risk card left at effectively a single second of engagement. ACD fired: *"What does your 3.6 seconds on Pivot's Income Gap card tell you that you didn't stay to ask Upskill's Identity Risk card?"* Note the reference to a precise, session-specific dwell measurement rather than a generic prompt — this is the calibrated LLM layer reasoning over the live behavioral trace, not a canned message.
 
 **Trigger 4 — confirmation pattern**
 
