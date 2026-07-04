@@ -12,11 +12,11 @@ This repository accompanies an academic preprint on ACD theory and is a proof-of
 
 The session opens by framing the decision: *"You're a mid-career professional. AI is disrupting your field. What's your move?"* The user is instructed to explore each path before committing to one, establishing the exploration phase that the behavioral trace is built from.
 
-**Trigger 1 — confirmation pattern**
+**Trigger 1 — premature pattern**
 
-![ACD trigger: confirmation pattern](docs/assets/acd-trigger-1.png)
+![ACD trigger: premature pattern](docs/assets/acd-trigger-1.png)
 
-Detected pattern: **confirmation** — the user attempted to commit to a branch after spending nearly all of their dwell time there, having gone to it first and dug deeper into it than anywhere else, while the other two paths were never even hovered. ACD fired: *"What will you tell your future self about why Pivot and Automate never even got a hover?"*
+Detected pattern: **premature** — the user attempted to commit very quickly, with almost no evidence-layer reading, having never even opened the other two paths. ACD fired: *"What will you tell your future self about why Pivot and Automate never even got a hover?"*
 
 **Trigger 2 — premature pattern**
 
@@ -24,11 +24,17 @@ Detected pattern: **confirmation** — the user attempted to commit to a branch 
 
 Detected pattern: **premature** — the user attempted to commit quickly, with very little evidence-layer reading across cards, including the referenced card being left at its surface layer. ACD fired: *"What does the version of you five years from now know about 'Role Ambiguity' that you didn't stay long enough to read today?"*
 
-**Trigger 3 — confirmation pattern, later in session**
+**Trigger 3 — premature pattern, later in session**
 
-![ACD trigger: confirmation pattern, later trigger](docs/assets/acd-trigger-3.png)
+![ACD trigger: premature pattern, later trigger](docs/assets/acd-trigger-3.png)
 
-Detected pattern: **confirmation** — a second ACD interrupt in the same session, this time citing exact dwell time on the specific card that anchored the bias. ACD fired: *"What does your 3.6 seconds on Pivot's Income Gap card tell you that you didn't stay to ask Upskill's Identity Risk card?"* Note the reference to a precise, session-specific dwell measurement rather than a generic prompt — this is the calibrated LLM layer reasoning over the live behavioral trace, not a canned message.
+Detected pattern: **premature** — a second ACD interrupt in the same session, this time citing exact dwell time on the card that was skimmed before committing. ACD fired: *"What does your 3.6 seconds on Pivot's Income Gap card tell you that you didn't stay to ask Upskill's Identity Risk card?"* Note the reference to a precise, session-specific dwell measurement rather than a generic prompt — this is the calibrated LLM layer reasoning over the live behavioral trace, not a canned message.
+
+**Trigger 4 — confirmation pattern**
+
+![ACD trigger: confirmation pattern](docs/assets/acd-trigger-4.png)
+
+Detected pattern: **confirmation** — the user was committing to Automate after concentrating dwell and dig-deeper activity there, without weighing evidence that might count against it. ACD fired: *"What evidence about Adoption Risk would make Automate feel like the wrong path for you?"*
 
 ## Three-Layer Architecture
 
@@ -59,7 +65,7 @@ A given branch can only trigger one ACD interrupt, and a session fires at most t
 
 | Source | Contribution to ASTRA |
 |---|---|
-| **Satpathy, S. (2024). Anticipatory Cognitive Dissonance [Preprint]. OSF.** https://osf.io/5symn | Primary theoretical grounding — the core claim that dissonance-inducing interrupts are more effective when fired *anticipatorily*, during bias formation, rather than post-hoc after a decision is committed. |
+| **Satpathy, S. (2025). "Cognitive dissonance as a trigger for intervention in anticipatory AI tutors." OSF Preprint.** https://osf.io/5symn | Primary theoretical grounding — the core claim that dissonance-inducing interrupts are more effective when fired *anticipatorily*, during bias formation, rather than post-hoc after a decision is committed. |
 | Yang et al. (2025), *FlexMind* (CMU) | Source paradigm for the branching trade-off exploration UI (multi-path cards, layered evidence, compare mode) that ASTRA instruments and extends into a real-time closed loop. |
 | Morewedge et al. (2015) | Empirical basis for debiasing via structured, deliberate engagement with alternatives — informs the design of the three decision branches and layered card evidence. |
 | Meichenbaum (1985) | Cognitive-behavioral grounding for self-instructional, reflective questioning as an intervention mechanism — informs the tone and framing of the Layer 3 prompts (curious, non-corrective, never prescriptive). |
