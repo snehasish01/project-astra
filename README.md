@@ -65,10 +65,12 @@ A given branch can only trigger one ACD interrupt, and a session fires at most t
 
 | Source | Contribution to ASTRA |
 |---|---|
-| **Satpathy, S. (2025). "Cognitive dissonance as a trigger for intervention in anticipatory AI tutors." OSF Preprint.** https://osf.io/5symn | Primary theoretical grounding — the core claim that dissonance-inducing interrupts are more effective when fired *anticipatorily*, during bias formation, rather than post-hoc after a decision is committed. |
-| Yang et al. (2025), *FlexMind* (CMU) | Source paradigm for the branching trade-off exploration UI (multi-path cards, layered evidence, compare mode) that ASTRA instruments and extends into a real-time closed loop. |
-| Morewedge et al. (2015) | Empirical basis for debiasing via structured, deliberate engagement with alternatives — informs the design of the three decision branches and layered card evidence. |
-| Meichenbaum (1985) | Cognitive-behavioral grounding for self-instructional, reflective questioning as an intervention mechanism — informs the tone and framing of the Layer 3 prompts (curious, non-corrective, never prescriptive). |
+| Satpathy, S. (2025). "Cognitive dissonance as a trigger for intervention in anticipatory AI tutors." OSF Preprint. https://osf.io/5symn | Primary theoretical grounding — the core claim that dissonance-inducing interrupts are more effective when fired *anticipatorily*, during bias formation, rather than post-hoc after a decision is committed. |
+| Festinger, L. (1957). *A Theory of Cognitive Dissonance*. Stanford University Press. | Foundational account of cognitive dissonance itself — the discomfort of holding conflicting cognitions and the drive toward resolution that the ACD framework repurposes as a design mechanism. |
+| Yang, Y., Mohanty, V., Martelaro, N., Kittur, A., Chen, Y., & Hong, M. (2025). "FlexMind: Scaffolding flexible ideation workflows with AI in creative problem-solving." arXiv:2509.12408. | Source paradigm for the branching trade-off exploration UI (multi-path cards, layered evidence, compare mode) that ASTRA instruments and extends into a real-time closed loop. |
+| Morewedge, C. K., Yoon, H., Scopelliti, I., Symborski, C. W., Korris, J. H., & Kassam, K. S. (2015). "Debiasing decisions: Improved decision making with a single training intervention." *Policy Insights from the Behavioral and Brain Sciences*, 2(1), 129–140. | Empirical basis for debiasing via structured, deliberate engagement with alternatives — informs the design of the three decision branches and layered card evidence; also the contrast case establishing that trained-in-advance debiasing is temporally dislocated from the decision itself. |
+| Meichenbaum, D. (1985). *Stress Inoculation Training*. Pergamon Press. | Cognitive-behavioral grounding for self-instructional, reflective questioning as an intervention mechanism — informs the tone and framing of the Layer 3 prompts (curious, non-corrective, never prescriptive). |
+| D'Mello, S., & Graesser, A. (2012). "AutoTutor and affective learning." *Instructional Science*, 40(1), 1–39. | Reference point for reactive, post-hoc affect-sensitive tutoring — the comparison case ASTRA's anticipatory framing is positioned against. |
 
 ## Run Locally
 
